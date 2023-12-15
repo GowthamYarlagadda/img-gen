@@ -1,71 +1,48 @@
 import streamlit as st
-from langchain.chat_models import ChatOpenAI
-from langchain.memory import ChatMessageHistory
-from langchain import PromptTemplate
+from openai import OpenAI
+import requests
+from PIL import Image
+from io import BytesIO
 
-# Initialize ChatMessageHistory
-history = ChatMessageHistory()
+def generate_image(prompt, api_key):
+    client = OpenAI(api_key=api_key)
 
-# Define basic_prompt and PromptTemplate
-basic_prompt = """
-Role: Compassionate therapist maintaining warmth and empathy. Respond with shorter responses.
-Instructions:
-- Start warmly: Greet and acknowledge emotions to encourage openness.
-- Listen actively: Respond thoughtfully, keeping responses short.
-...
-- Avoid clinical jargon: Use accessible language.
-- No quick solutions: Prioritize understanding before suggesting.
-Goal:
-- At the end, After gaining insight into their concerns, categorize their challenges into Depression, Social Issues, Anxiety, or Bipolar disorder.
-  and use this statement exactly as it is: "It seems that your concerns might be connected to ____."
-Maintain empathy and connection for a supportive environment.
-Question: {question}
-Answer:
-"""
+    try:
+        response = client.images.generate(
+            model="dall-e-3",
+            prompt=prompt,
+            size="1024x1024",
+            quality="standard",
+            n=1,
+        )
 
-# Set up the initial model
-llm = ChatOpenAI(temperature=0, model="gpt-3.5-turbo-0613")
+        image_url = response.data[0].url
 
-# Function to run the chatbot model
-def run_chatbot_model(message, history):
-    if message.lower() == 'bye':
-        history.clear()
-        return None
-    else:
-        model_output = llm.run(message)
-        history.add_user_message(message)
-        history.add_ai_message(model_output)
-        return model_output
+        image_data = requests.get(image_url).content
+  
+        image = Image.open(BytesIO(image_data))
 
-# Streamlit app
+        return image
+
+    except Exception as e:
+        st.error(f"Error generating image: {str(e)}")
+
+
 def main():
-    st.title("OpenAI Chatbot with Streamlit")
+    st.title("OpenAI DALL-E Image Generator")
 
-    # Get OpenAI API key from user input
-    openai_api_key = st.text_input("Enter your OpenAI API key:", type="password")
+    api_key = st.text_input("Enter your OpenAI API key:", type="password")
 
-    # Check if API key is provided
-    if openai_api_key:
-        # Initialize ChatOpenAI model with the provided API key
-        llm = ChatOpenAI(api_key=openai_api_key, temperature=0, model="gpt-3.5-turbo-0613")
+    prompt = st.text_input("Enter a prompt for image generation:")
 
-        # Get user input
-        user_input = st.text_input("User Input:", "")
+    if st.button("Generate Image"):
+        if api_key:
 
-        if st.button("Submit"):
-            # Run the chatbot model
-            model_output = run_chatbot_model(user_input, history)
-
-            # Display model output
-            st.text("Chatbot Output:")
-            st.text(model_output)
-
-    # Display conversation history
-    st.text("Conversation History:")
-    for user_msg, ai_msg in zip(history.user_messages, history.ai_messages):
-        st.text(f"User: {user_msg}")
-        st.text(f"AI: {ai_msg}")
-        st.text("-" * 30)
+            generated_image = generate_image(prompt, api_key)
+            if generated_image:
+                st.image(generated_image, caption="Generated Image", use_column_width=True)
+        else:
+            st.warning("Please enter your OpenAI API key.")
 
 if __name__ == "__main__":
     main()
